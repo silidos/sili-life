@@ -6,8 +6,28 @@ import CheckListCard from '../components/CheckListCard';
 import { FAB, Button, Portal, Dialog, TextInput, Divider, Text, IconButton } from 'react-native-paper';
 import { Link } from 'expo-router';
 import ManageTasksDialog from '../components/ManageTasksDialog';
+import { useEffect } from 'react';
+import { useTasks } from '../store/tasks';
+
 
 export default function HomeScreen() {
+
+  useEffect(() => {
+    const store = useTasks.getState();
+    if (!store.hydrated) store.hydrate();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const notesStore = require('../store/notes').useNotes.getState();
+      if (!notesStore.hydrated) {
+        notesStore.hydrate();
+      }
+    } catch (e) {
+      console.warn('notes hydrate failed', e);
+    }
+  }, []);
+
   const [manageOpen, setManageOpen] = useState(false);
 
   return (
