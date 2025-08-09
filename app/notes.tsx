@@ -1,15 +1,207 @@
-import { View, StyleSheet } from 'react-native';
-import { Text } from 'react-native-paper';
+import React, { useState } from 'react';
+import { View, StyleSheet, FlatList, ScrollView, Pressable } from 'react-native';
+import { Text, FAB, Card, List, Divider, Dialog, Portal, Button, TextInput, SegmentedButtons, Appbar, Menu } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Link, useRouter } from 'expo-router';
+import { useNotes } from '../store/notes';
+
+// Local note type for MVP; can be moved to SQLite later
+export type NoteType = 'free' | 'chatgpt' | 'recipe' | 'workout' | 'grocery' | 'todo';
+
+type Note = {
+  id: string;
+  type: NoteType;
+  title: string;
+  content: string;
+  createdAt: number;
+};
 
 export default function Notes() {
+  const router = useRouter();
+  const notes = useNotes(s => s.notes);
+  const addNoteToStore = useNotes(s => s.addNote);
+
+  // Dialog state
+  const [open, setOpen] = useState(false);
+  const [draftType, setDraftType] = useState<NoteType>('free');
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftContent, setDraftContent] = useState('');
+  const [typeMenuVisible, setTypeMenuVisible] = useState(false);
+  // Filter state
+  const [filterType, setFilterType] = useState<NoteType | 'all'>('all');
+  const [filterMenuVisible, setFilterMenuVisible] = useState(false);
+
+  const addNote = () => {
+    const id = addNoteToStore(draftType, draftTitle || defaultTitle(draftType));
+    setDraftTitle('');
+    setDraftContent('');
+    setDraftType('free');
+    setOpen(false);
+    router.push(`/notes/${id}`);
+  };
+
+  // Filtered notes and empty state
+  const filteredNotes = notes.filter(n => filterType === 'all' ? true : n.type === filterType);
+  const empty = filteredNotes.length === 0;
+
+  const renderItem = ({ item }: { item: Note }) => {
+    const preview = (item.content || '').split(/\r?\n/)[0];
+    return (
+      <View>
+        <Pressable onPress={() => router.push(`/notes/${item.id}`)}>
+          <Card style={[styles.card, styles.cardSpacing]}>
+            <Card.Title title={item.title} subtitle={`${prettyType(item.type)} • ${new Date(item.createdAt).toLocaleString()}`} />
+            {item.content ? (
+              <Card.Content>
+                <Text style={{ opacity: 0.9 }} numberOfLines={1} ellipsizeMode="tail">{preview}</Text>
+              </Card.Content>
+            ) : null}
+          </Card>
+        </Pressable>
+      </View>
+    );
+  };
+
+  const typeLabel = (t: NoteType) => prettyType(t);
+
   return (
-    <View style={styles.screen}>
-      <Text variant="headlineSmall">Notes</Text>
-      <Text>Coming soon: recipes, workouts, grocery/todo, free text.</Text>
-    </View>
+    <SafeAreaView style={styles.screen} edges={['top','left','right']}>
+      <Appbar.Header mode="small" style={styles.appbar} elevated={false}>
+        <Appbar.BackAction onPress={() => router.back()} />
+        <Appbar.Content title="Notes" subtitle={filterType === 'all' ? 'All' : prettyType(filterType)} />
+        <Menu
+          visible={filterMenuVisible}
+          onDismiss={() => setFilterMenuVisible(false)}
+          anchor={
+            <Appbar.Action icon="filter-variant" onPress={() => setFilterMenuVisible(true)} accessibilityLabel="Filter notes" />
+          }
+          anchorPosition="bottom"
+        >
+          <Menu.Item onPress={() => { setFilterType('all'); setFilterMenuVisible(false); }} title={`All${filterType==='all' ? ' ✓' : ''}`} />
+          <Menu.Item onPress={() => { setFilterType('free'); setFilterMenuVisible(false); }} title={`Freeform${filterType==='free' ? ' ✓' : ''}`} />
+          <Menu.Item onPress={() => { setFilterType('chatgpt'); setFilterMenuVisible(false); }} title={`ChatGPT${filterType==='chatgpt' ? ' ✓' : ''}`} />
+          <Menu.Item onPress={() => { setFilterType('recipe'); setFilterMenuVisible(false); }} title={`Recipe${filterType==='recipe' ? ' ✓' : ''}`} />
+          <Menu.Item onPress={() => { setFilterType('workout'); setFilterMenuVisible(false); }} title={`Workout${filterType==='workout' ? ' ✓' : ''}`} />
+          <Menu.Item onPress={() => { setFilterType('grocery'); setFilterMenuVisible(false); }} title={`Grocery${filterType==='grocery' ? ' ✓' : ''}`} />
+          <Menu.Item onPress={() => { setFilterType('todo'); setFilterMenuVisible(false); }} title={`To‑Do${filterType==='todo' ? ' ✓' : ''}`} />
+        </Menu>
+      </Appbar.Header>
+
+      {empty ? (
+        <List.Section>
+          <List.Item title="No notes yet" description="Tap the + to add a note" left={props => <List.Icon {...props} icon="note-text" />} />
+        </List.Section>
+      ) : (
+        <FlatList
+          data={filteredNotes}
+          keyExtractor={n => n.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 96 }}
+        />
+      )}
+
+      {/* Add Note FAB */}
+      <FAB icon="plus" style={styles.fab} onPress={() => setOpen(true)} />
+
+      {/* Add Note Dialog */}
+      <Portal>
+        <Dialog visible={open} onDismiss={() => setOpen(false)}>
+          <Dialog.Title>New Note</Dialog.Title>
+          <Dialog.ScrollArea style={{ maxHeight: 320 }}>
+            <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
+              <Menu
+                visible={typeMenuVisible}
+                onDismiss={() => setTypeMenuVisible(false)}
+                anchor={
+                  <Button
+                    mode="outlined"
+                    onPress={() => setTypeMenuVisible(true)}
+                    compact
+                    style={{ marginBottom: 12, alignSelf: 'flex-start' }}
+                    contentStyle={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text>{`Type: ${typeLabel(draftType)}`}</Text>
+                      <List.Icon icon="menu-down" />
+                    </View>
+                  </Button>
+                }
+                anchorPosition="bottom"
+                contentStyle={{ marginTop: -13 }}
+              >
+                <Menu.Item onPress={() => { setDraftType('free'); setTypeMenuVisible(false); }} title="Freeform" />
+                <Menu.Item onPress={() => { setDraftType('chatgpt'); setTypeMenuVisible(false); }} title="ChatGPT" />
+                <Menu.Item onPress={() => { setDraftType('recipe'); setTypeMenuVisible(false); }} title="Recipe" />
+                <Menu.Item onPress={() => { setDraftType('workout'); setTypeMenuVisible(false); }} title="Workout" />
+                <Menu.Item onPress={() => { setDraftType('grocery'); setTypeMenuVisible(false); }} title="Grocery" />
+                <Menu.Item onPress={() => { setDraftType('todo'); setTypeMenuVisible(false); }} title="To‑Do" />
+              </Menu>
+              <TextInput
+                label="Title"
+                value={draftTitle}
+                onChangeText={setDraftTitle}
+                mode="outlined"
+                style={{ marginBottom: 12 }}
+              />
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setOpen(false)}>Cancel</Button>
+            <Button mode="contained" onPress={addNote}>Save</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </SafeAreaView>
   );
+}
+
+function defaultTitle(t: NoteType): string {
+  switch (t) {
+    case 'chatgpt': return 'ChatGPT Note';
+    case 'recipe': return 'New Recipe';
+    case 'workout': return 'Workout Plan';
+    case 'grocery': return 'Grocery List';
+    case 'todo': return 'To‑Do List';
+    default: return 'Untitled Note';
+  }
+}
+
+function labelForType(t: NoteType): string {
+  switch (t) {
+    case 'chatgpt': return 'Paste conversation/export here';
+    case 'recipe': return 'Ingredients / steps';
+    case 'workout': return 'Sets / reps / notes';
+    case 'grocery': return 'Items (one per line)';
+    case 'todo': return 'Tasks (one per line)';
+    default: return 'Write your note';
+  }
+}
+
+function prettyType(t: NoteType): string {
+  switch (t) {
+    case 'chatgpt': return 'ChatGPT';
+    case 'recipe': return 'Recipe';
+    case 'workout': return 'Workout';
+    case 'grocery': return 'Grocery';
+    case 'todo': return 'To‑Do';
+    default: return 'Freeform';
+  }
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, padding: 16, gap: 12 },
+  fab: { position: 'absolute', right: 20, bottom: 24 },
+  card: { borderRadius: 12 },
+  cardSpacing: { marginBottom: 10 },
+  appbar: {
+    marginHorizontal: -16,
+    marginTop: -80,
+    backgroundColor: 'transparent',
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 0,
+    borderBottomWidth: 0,
+  },
 });
