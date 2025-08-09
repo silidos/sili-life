@@ -10,6 +10,7 @@ type State = {
   hydrate: () => Promise<void>;
   addNote: (type: NoteType, title: string) => Promise<string>;
   updateNote: (id: string, patch: Partial<Pick<Note, 'title' | 'content'>>) => Promise<void>;
+  deleteNote: (id: string) => Promise<void>;
   getNote: (id: string) => Note | undefined;
 };
 
@@ -80,6 +81,15 @@ export const useNotes = create<State>((set, get) => ({
         n.id === id ? { ...n, ...patch, updatedAt: now } : n
       ),
     }));
+  },
+
+  deleteNote: async (id) => {
+    try {
+      db.runSync('DELETE FROM notes WHERE id = ?', [id]);
+    } catch (err) {
+      console.error('Error deleting note from DB:', err);
+    }
+    set(s => ({ notes: s.notes.filter(n => n.id !== id) }));
   },
 
   getNote: (id) => get().notes.find(n => n.id === id),

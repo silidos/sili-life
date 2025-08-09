@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, FlatList, ScrollView, Pressable } from 'react-native';
-import { Text, FAB, Card, List, Divider, Dialog, Portal, Button, TextInput, SegmentedButtons, Appbar, Menu } from 'react-native-paper';
+import { Text, FAB, Card, List, Divider, Dialog, Portal, Button, TextInput, SegmentedButtons, Appbar, Menu, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
 import { useNotes } from '../store/notes';
@@ -20,6 +20,7 @@ export default function Notes() {
   const router = useRouter();
   const notes = useNotes(s => s.notes);
   const addNoteToStore = useNotes(s => s.addNote);
+  const deleteNoteFromStore = useNotes(s => s.deleteNote);
 
   // Dialog state
   const [open, setOpen] = useState(false);
@@ -30,6 +31,10 @@ export default function Notes() {
   // Filter state
   const [filterType, setFilterType] = useState<NoteType | 'all'>('all');
   const [filterMenuVisible, setFilterMenuVisible] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteTitle, setConfirmDeleteTitle] = useState<string>('');
+
+  const [menuForId, setMenuForId] = useState<string | null>(null);
 
   const addNote = () => {
     const id = addNoteToStore(draftType, draftTitle || defaultTitle(draftType));
@@ -46,19 +51,41 @@ export default function Notes() {
 
   const renderItem = ({ item }: { item: Note }) => {
     const preview = (item.content || '').split(/\r?\n/)[0];
+  
     return (
-      <View>
-        <Pressable onPress={() => router.push(`/notes/${item.id}`)}>
-          <Card style={[styles.card, styles.cardSpacing]}>
-            <Card.Title title={item.title} subtitle={`${prettyType(item.type)} • ${new Date(item.createdAt).toLocaleString()}`} />
-            {item.content ? (
-              <Card.Content>
-                <Text style={{ opacity: 0.9 }} numberOfLines={1} ellipsizeMode="tail">{preview}</Text>
-              </Card.Content>
-            ) : null}
-          </Card>
-        </Pressable>
-      </View>
+      <Card style={[styles.card, styles.cardSpacing]}>
+        <Card.Title
+          title={item.title}
+          subtitle={`${prettyType(item.type)} • ${new Date(item.createdAt).toLocaleString()}`}
+          right={(props) => (
+            <Menu
+              visible={menuForId === item.id}
+              onDismiss={() => setMenuForId(null)}
+              anchor={<IconButton {...props} icon="dots-vertical" onPress={() => setMenuForId(item.id)} />}
+            >
+              <Menu.Item
+                leadingIcon="pencil-outline"
+                title="Open"
+                onPress={() => { setMenuForId(null); router.push(`/notes/${item.id}`); }}
+              />
+              <Menu.Item
+                leadingIcon="delete-outline"
+                title="Delete"
+                onPress={() => {
+                  setMenuForId(null);
+                  setConfirmDeleteId(item.id);
+                  setConfirmDeleteTitle(item.title || 'this note');
+                }}
+              />
+            </Menu>
+          )}
+        />
+        {item.content ? (
+          <Card.Content>
+            <Text style={{ opacity: 0.9 }} numberOfLines={1} ellipsizeMode="tail">{preview}</Text>
+          </Card.Content>
+        ) : null}
+      </Card>
     );
   };
 
@@ -148,6 +175,26 @@ export default function Notes() {
           <Dialog.Actions>
             <Button onPress={() => setOpen(false)}>Cancel</Button>
             <Button mode="contained" onPress={addNote}>Save</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={!!confirmDeleteId} onDismiss={() => setConfirmDeleteId(null)}>
+          <Dialog.Title>Delete note?</Dialog.Title>
+          <Dialog.Content>
+            <Text>Are you sure you want to delete “{confirmDeleteTitle}”?</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmDeleteId(null)}>Cancel</Button>
+            <Button
+              mode="contained"
+              onPress={async () => {
+                const id = confirmDeleteId!;
+                setConfirmDeleteId(null);
+                await deleteNoteFromStore(id);
+              }}
+            >
+              Delete
+            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
