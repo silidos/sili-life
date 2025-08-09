@@ -10,9 +10,33 @@ function ManageTasksDialog({ visible, onDismiss }: ManageTasksDialogProps) {
     const [todayTaskText, setTodayTaskText] = useState('');
   
     const store = useTasks(s => s);
-    const tasksToday = store.tasksForDate();
     const defaults = store.tasks;
-    const { toggleToday, addTask, removeTask, addDayTask, removeDayTask, removeDefaultForDate } = store;
+    const { addTask, removeTask, addDayTask, removeDayTask, removeDefaultForDate, restoreDefaultForDate } = store;
+
+    // Build a Today list for the dialog that shows BOTH visible and hidden defaults, plus day-only tasks
+    const ymd = new Date().toISOString().slice(0, 10);
+    const hiddenSet = store.dayRemovals[ymd] ?? new Set<string>();
+    const doneSet = store.completions[ymd] ?? new Set<string>();
+    const dayOnly = store.dayAdds[ymd] ?? [];
+
+    const todayItems = [
+      // defaults (mark if hidden)
+      ...defaults.map(task => ({
+        task,
+        isDefault: true as const,
+        isDay: false as const,
+        hidden: hiddenSet.has(task.id),
+        checked: doneSet.has(task.id),
+      })),
+      // day-only tasks
+      ...dayOnly.map(task => ({
+        task,
+        isDefault: false as const,
+        isDay: true as const,
+        hidden: false,
+        checked: doneSet.has(task.id),
+      })),
+    ];
   
     return (
       <Portal>
@@ -69,14 +93,8 @@ function ManageTasksDialog({ visible, onDismiss }: ManageTasksDialogProps) {
                 {/* Today's list */}
                 <View style={{ marginBottom: 8 }}>
                   <Text variant="labelLarge" style={styles.sectionLabel}>Today</Text>
-                  {tasksToday.map(({ task, checked, isDefault, isDay }) => (
-                    <View key={task.id} style={styles.taskRow}>
-                      <IconButton
-                        icon={checked ? 'checkbox-marked' : 'checkbox-blank-outline'}
-                        onPress={() => toggleToday(task.id)}
-                        size={20}
-                        style={styles.rowIcon}
-                      />
+                  {todayItems.map(({ task, checked, isDefault, isDay, hidden }) => (
+                    <View key={task.id} style={[styles.taskRow, hidden && styles.dimmed]}>
                       <Text
                         variant="bodyMedium"
                         numberOfLines={2}
@@ -84,15 +102,23 @@ function ManageTasksDialog({ visible, onDismiss }: ManageTasksDialogProps) {
                       >
                         {task.title}
                       </Text>
-                      <IconButton
-                        icon={isDefault ? 'eye-off-outline' : 'delete-outline'}
-                        onPress={() => {
-                          if (isDefault) removeDefaultForDate(task.id);
-                          else if (isDay) removeDayTask(task.id);
-                        }}
-                        size={18}
-                        style={styles.rowIcon}
-                      />
+                      {isDefault ? (
+                        <IconButton
+                          icon={hidden ? 'eye-off-outline' : 'eye-outline'}
+                          onPress={() => {
+                            if (hidden) restoreDefaultForDate(task.id); else removeDefaultForDate(task.id);
+                          }}
+                          size={18}
+                          style={styles.rowIcon}
+                        />
+                      ) : (
+                        <IconButton
+                          icon="delete-outline"
+                          onPress={() => removeDayTask(task.id)}
+                          size={18}
+                          style={styles.rowIcon}
+                        />
+                      )}
                     </View>
                   ))}
                 </View>
@@ -104,7 +130,6 @@ function ManageTasksDialog({ visible, onDismiss }: ManageTasksDialogProps) {
                   <Text variant="labelLarge" style={styles.sectionLabel}>Defaults (every day)</Text>
                   {defaults.map((task) => (
                     <View key={task.id} style={styles.taskRow}>
-                      <IconButton icon="dots-horizontal" disabled size={18} style={styles.rowIcon} />
                       <Text variant="bodyMedium" numberOfLines={2} style={styles.taskTitle}>
                         {task.title}
                       </Text>
@@ -137,6 +162,7 @@ const styles = StyleSheet.create({
   rowIcon: { margin: 0 },
   taskTitle: { flex: 1 },
   completed: { textDecorationLine: 'line-through', color: '#888' },
+  dimmed: { opacity: 0.5 },
 });
 
 export default ManageTasksDialog;
