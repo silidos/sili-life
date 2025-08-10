@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, ScrollView, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { Appbar, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useNotes } from '../../store/notes';
 import NoteTypeActions from '../../components/note-actions/NoteTypeActions';
+import GroceryActions from '../../components/note-actions/grocery/GroceryActions';
 import Markdown from 'react-native-markdown-display';
 
 export default function NoteEditor() {
@@ -102,6 +103,12 @@ export default function NoteEditor() {
             >
               {prepareForRender(content || '')}
             </Markdown>
+          ) : note?.type === 'grocery' ? (
+            (
+              <View style={{ flex: 1, alignItems: 'center' }}>
+                <GroceryActions noteId={id as string} />
+              </View>
+            )
           ) : (
             <TextInput
               ref={inputRef}
