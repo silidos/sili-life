@@ -53,7 +53,10 @@ export default function Notes() {
     const preview = (item.content || '').split(/\r?\n/)[0];
   
     return (
-      <Card style={[styles.card, styles.cardSpacing]}>
+      <Card
+        style={[styles.card, styles.cardSpacing]}
+        onPress={() => router.push(`/notes/${item.id}`)}
+      >
         <Card.Title
           title={item.title}
           subtitle={`${prettyType(item.type)} • ${new Date(item.createdAt).toLocaleString()}`}
