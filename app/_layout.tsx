@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { Provider as PaperProvider, MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
 import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const cozyPalette = {
   primary: '#6B5B95', // muted lavender
@@ -37,9 +38,11 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   return (
     <SafeAreaProvider>
-      <PaperProvider theme={scheme === 'dark' ? darkTheme : lightTheme}>
-        <Stack screenOptions={{ headerShown: false }} />
-      </PaperProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <PaperProvider theme={scheme === 'dark' ? darkTheme : lightTheme}>
+          <Stack screenOptions={{ headerShown: false }} />
+        </PaperProvider>
+      </GestureHandlerRootView>
     </SafeAreaProvider>
   );
 }

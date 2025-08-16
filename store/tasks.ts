@@ -29,6 +29,10 @@ type State = {
   removeDayTask: (taskId: string, ymd?: string) => void;
   removeDefaultForDate: (taskId: string, ymd?: string) => void;
   restoreDefaultForDate: (taskId: string, ymd?: string) => void;
+
+  // Reordering
+  reorderDefaults: (orderedIds: string[]) => void;
+  reorderDay: (orderedIds: string[], ymd?: string) => void;
 };
 
 function todayYMD() {
@@ -263,5 +267,47 @@ export const useTasks = create<State>((set, get) => ({
       setForDay.delete(taskId);
       return { dayRemovals: { ...s.dayRemovals, [ymd]: setForDay } };
     });
+  },
+
+  reorderDefaults: (orderedIds) => {
+    const current = get().tasks;
+    if (!orderedIds.length || orderedIds.length !== current.length) return;
+    const byId = new Map(current.map(t => [t.id, t] as const));
+    // Persist to DB
+    try {
+      orderedIds.forEach((id, index) => {
+        db.runSync(`UPDATE tasks SET sort = ? WHERE id = ?`, [index + 1, id]);
+      });
+    } catch (e) {
+      console.warn('reorderDefaults failed', e);
+    }
+    // Update in-memory state
+    const nextTasks: Task[] = orderedIds.map((id, index) => {
+      const t = byId.get(id);
+      if (!t) return { id, title: '', sort: index + 1 } as Task; // should not happen
+      return { ...t, sort: index + 1 };
+    });
+    set({ tasks: nextTasks });
+  },
+
+  reorderDay: (orderedIds, ymd = todayYMD()) => {
+    const current = get().dayAdds[ymd] ?? [];
+    if (!orderedIds.length || orderedIds.length !== current.length) return;
+    const byId = new Map(current.map(t => [t.id, t] as const));
+    // Persist to DB
+    try {
+      orderedIds.forEach((id, index) => {
+        db.runSync(`UPDATE day_adds SET sort = ? WHERE id = ?`, [index + 1, id]);
+      });
+    } catch (e) {
+      console.warn('reorderDay failed', e);
+    }
+    // Update in-memory state
+    const next: Task[] = orderedIds.map((id, index) => {
+      const t = byId.get(id);
+      if (!t) return { id, title: '', sort: index + 1 } as Task; // should not happen
+      return { ...t, sort: index + 1 };
+    });
+    set(s => ({ dayAdds: { ...s.dayAdds, [ymd]: next } }));
   },
 }));

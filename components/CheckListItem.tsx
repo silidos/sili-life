@@ -1,13 +1,14 @@
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Checkbox, Text } from 'react-native-paper';
 
-export default function ChecklistItem({ title, checked, onToggle }: {
+export default function ChecklistItem({ title, checked, onToggle, onLongPress }: {
   title: string;
   checked: boolean;
   onToggle: () => void;
+  onLongPress?: () => void;
 }) {
   return (
-    <Pressable onPress={onToggle} style={({ pressed }) => [styles.row, pressed && { opacity: .75 }]}>
+    <Pressable onPress={onToggle} onLongPress={onLongPress} style={({ pressed }) => [styles.row, pressed && { opacity: .75 }]}>
       <Checkbox.Android
         status={checked ? 'checked' : 'unchecked'}
         onPress={onToggle}
