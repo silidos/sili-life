@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList, ScrollView, Pressable } from 'react-native';
+import { View, StyleSheet, FlatList, ScrollView, Pressable, PanResponder } from 'react-native';
 import { Text, FAB, Card, List, Divider, Dialog, Portal, Button, TextInput, SegmentedButtons, Appbar, Menu, IconButton } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
@@ -19,6 +19,7 @@ type Note = {
 export default function Notes() {
   const router = useRouter();
   const notes = useNotes(s => s.notes);
+  const reorderNotes = useNotes(s => (s as any).reorderNotes);
   const addNoteToStore = useNotes(s => s.addNote);
   const deleteNoteFromStore = useNotes(s => s.deleteNote);
 
@@ -47,40 +48,100 @@ export default function Notes() {
 
   // Filtered notes and empty state
   const filteredNotes = notes.filter(n => filterType === 'all' ? true : n.type === filterType);
+  const [orderIds, setOrderIds] = useState<string[]>(filteredNotes.map(n => n.id));
+  const [isDragging, setIsDragging] = useState(false);
+  const orderRef = React.useRef(orderIds);
+  function setOrder(next: string[]) { orderRef.current = next; setOrderIds(next); }
+  React.useEffect(() => {
+    const visible = filteredNotes.map(n => n.id);
+    const merged = [...orderRef.current.filter(id => visible.includes(id)), ...visible.filter(id => !orderRef.current.includes(id))];
+    if (merged.length !== orderRef.current.length || merged.some((id, i) => id !== orderRef.current[i])) {
+      setOrder(merged);
+    }
+  }, [filteredNotes]);
+
+  const ROW_HEIGHT = 82; // approximate card height for drag math
+  const draggingIndexRef = React.useRef<number>(-1);
+  const panResponderFor = (index: number) => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onStartShouldSetPanResponderCapture: () => false,
+    onMoveShouldSetPanResponder: (_evt, g) => Math.abs(g.dy) > 10,
+    onMoveShouldSetPanResponderCapture: (_evt, g) => Math.abs(g.dy) > 10,
+    onPanResponderGrant: () => {
+      draggingIndexRef.current = index;
+    },
+    onPanResponderMove: (_evt, gesture) => {
+      if (!isDragging) setIsDragging(true);
+      const from = draggingIndexRef.current;
+      const desired = Math.round(from + gesture.dy / ROW_HEIGHT);
+      let to = desired;
+      if (to < 0) to = 0;
+      if (to > orderRef.current.length - 1) to = orderRef.current.length - 1;
+      if (to !== from) {
+        const next = orderRef.current.slice();
+        const [m] = next.splice(from, 1);
+        next.splice(to, 0, m);
+        setOrder(next);
+        draggingIndexRef.current = to;
+      }
+    },
+    onPanResponderRelease: () => {
+      if (isDragging) {
+        reorderNotes(orderRef.current);
+        setIsDragging(false);
+      }
+      draggingIndexRef.current = -1;
+    },
+    onPanResponderTerminate: () => {
+      if (isDragging) {
+        reorderNotes(orderRef.current);
+        setIsDragging(false);
+      }
+      draggingIndexRef.current = -1;
+    },
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
+  });
   const empty = filteredNotes.length === 0;
 
-  const renderItem = ({ item }: { item: Note }) => {
+  const renderItem = ({ item, index }: { item: Note; index: number }) => {
     const preview = (item.content || '').split(/\r?\n/)[0];
+    const pan = panResponderFor(index);
   
     return (
       <Card
         style={[styles.card, styles.cardSpacing]}
-        onPress={() => router.push(`/notes/${item.id}`)}
+        onPress={() => { if (!isDragging) router.push(`/notes/${item.id}`); }}
       >
         <Card.Title
           title={item.title}
           subtitle={`${prettyType(item.type)} • ${new Date(item.createdAt).toLocaleString()}`}
           right={(props) => (
-            <Menu
-              visible={menuForId === item.id}
-              onDismiss={() => setMenuForId(null)}
-              anchor={<IconButton {...props} icon="dots-vertical" onPress={() => setMenuForId(item.id)} />}
-            >
-              <Menu.Item
-                leadingIcon="pencil-outline"
-                title="Open"
-                onPress={() => { setMenuForId(null); router.push(`/notes/${item.id}`); }}
-              />
-              <Menu.Item
-                leadingIcon="delete-outline"
-                title="Delete"
-                onPress={() => {
-                  setMenuForId(null);
-                  setConfirmDeleteId(item.id);
-                  setConfirmDeleteTitle(item.title || 'this note');
-                }}
-              />
-            </Menu>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View {...pan.panHandlers}>
+                <IconButton {...props} icon="drag-vertical" onPress={() => {}} accessibilityLabel="Reorder" />
+              </View>
+              <Menu
+                visible={menuForId === item.id}
+                onDismiss={() => setMenuForId(null)}
+                anchor={<IconButton {...props} icon="dots-vertical" onPress={() => setMenuForId(item.id)} />}
+              >
+                <Menu.Item
+                  leadingIcon="pencil-outline"
+                  title="Open"
+                  onPress={() => { setMenuForId(null); router.push(`/notes/${item.id}`); }}
+                />
+                <Menu.Item
+                  leadingIcon="delete-outline"
+                  title="Delete"
+                  onPress={() => {
+                    setMenuForId(null);
+                    setConfirmDeleteId(item.id);
+                    setConfirmDeleteTitle(item.title || 'this note');
+                  }}
+                />
+              </Menu>
+            </View>
           )}
         />
         {item.content ? (
@@ -123,10 +184,12 @@ export default function Notes() {
         </List.Section>
       ) : (
         <FlatList
-          data={filteredNotes}
+          data={orderIds.map(id => filteredNotes.find(n => n.id === id)).filter(Boolean) as Note[]}
           keyExtractor={n => n.id}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 96 }}
+          scrollEnabled={!isDragging}
+          scrollEventThrottle={16}
         />
       )}
 

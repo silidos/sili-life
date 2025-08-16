@@ -12,6 +12,7 @@ type State = {
   updateNote: (id: string, patch: Partial<Pick<Note, 'title' | 'content'>>) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   getNote: (id: string) => Note | undefined;
+  reorderNotes: (orderedIds: string[]) => void;
 };
 
 export const useNotes = create<State>((set, get) => ({
@@ -93,4 +94,29 @@ export const useNotes = create<State>((set, get) => ({
   },
 
   getNote: (id) => get().notes.find(n => n.id === id),
+
+  reorderNotes: (orderedIds) => {
+    const current = get().notes;
+    if (!orderedIds.length) return;
+    const byId = new Map(current.map(n => [n.id, n] as const));
+    // Persist an explicit position column emulated via updatedAt ordering (highest first)
+    // We will set decreasing updatedAt so order is stable even across hydrate.
+    const now = Date.now();
+    try {
+      orderedIds.forEach((id, index) => {
+        const ts = now - index; // ensure strict order
+        db.runSync('UPDATE notes SET updatedAt = ? WHERE id = ?', [ts, id]);
+      });
+    } catch (err) {
+      console.warn('reorderNotes failed', err);
+    }
+    const next = orderedIds
+      .map((id, index) => {
+        const n = byId.get(id);
+        if (!n) return undefined as any;
+        return { ...n, updatedAt: now - index } as Note;
+      })
+      .filter(Boolean);
+    set({ notes: next });
+  },
 }));

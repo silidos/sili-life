@@ -1,90 +1,9 @@
-import { useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, View, StyleSheet, ScrollView, Keyboard, PanResponder, GestureResponderEvent, PanResponderGestureState } from 'react-native';
+import { useState } from "react";
+import { View, StyleSheet, ScrollView, Keyboard } from 'react-native';
 import { Portal, Dialog, Divider, IconButton, TextInput, Text, Button } from "react-native-paper";
 import { useTasks } from "../store/tasks";
 
 type ManageTasksDialogProps = { visible: boolean; onDismiss: () => void };
-
-type ReorderableListProps = {
-    title: string;
-    items: { id: string; title: string }[];
-    onCommit: (ids: string[]) => void;
-};
-
-function ReorderableList({ title, items, onCommit }: ReorderableListProps) {
-    const ROW_HEIGHT = 44;
-    const [ordered, setOrdered] = useState(items);
-    const draggingIndexRef = useRef<number | null>(null);
-    const startYRef = useRef(0);
-
-    // Keep local list in sync if source changes
-    const key = useMemo(() => items.map(t => t.id).join(','), [items]);
-    const prevKeyRef = useRef<string | null>(null);
-    if (prevKeyRef.current !== key) {
-        prevKeyRef.current = key;
-        if (ordered.length !== items.length || ordered.some((t, i) => t.id !== items[i].id)) {
-            setOrdered(items);
-        }
-    }
-
-    function moveItem(array: typeof ordered, from: number, to: number) {
-        const next = array.slice();
-        const [m] = next.splice(from, 1);
-        next.splice(to, 0, m);
-        return next;
-    }
-
-    function createPanHandlers(index: number) {
-        return PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: () => true,
-            onPanResponderGrant: (_evt: GestureResponderEvent, _gs: PanResponderGestureState) => {
-                draggingIndexRef.current = index;
-                startYRef.current = 0;
-            },
-            onPanResponderMove: (_evt, gestureState) => {
-                if (draggingIndexRef.current == null) return;
-                const dy = gestureState.dy;
-                const offsetRows = Math.round(dy / ROW_HEIGHT);
-                const from = draggingIndexRef.current;
-                let to = from + offsetRows;
-                if (to < 0) to = 0;
-                if (to > ordered.length - 1) to = ordered.length - 1;
-                if (to !== from) {
-                    setOrdered(prev => moveItem(prev, from, to));
-                    draggingIndexRef.current = to;
-                    startYRef.current = dy - offsetRows * ROW_HEIGHT;
-                }
-            },
-            onPanResponderRelease: () => {
-                const ids = ordered.map(t => t.id);
-                draggingIndexRef.current = null;
-                onCommit(ids);
-            },
-            onPanResponderTerminate: () => {
-                const ids = ordered.map(t => t.id);
-                draggingIndexRef.current = null;
-                onCommit(ids);
-            },
-        });
-    }
-
-    return (
-        <View style={{ marginBottom: 8 }}>
-            <Text variant="labelLarge" style={styles.sectionLabel}>{title}</Text>
-            {ordered.map((task, index) => {
-                const pan = createPanHandlers(index);
-                const isDragging = draggingIndexRef.current === index;
-                return (
-                    <View key={task.id} style={[styles.taskRow, isDragging && { opacity: 0.8 }]} {...pan.panHandlers}>
-                        <IconButton icon="drag-vertical" size={18} style={styles.rowIcon} onPress={() => {}} />
-                        <Text variant="bodyMedium" numberOfLines={2} style={styles.taskTitle}>{task.title}</Text>
-                    </View>
-                );
-            })}
-        </View>
-    );
-}
 
 function ManageTasksDialog({ visible, onDismiss }: ManageTasksDialogProps) {
     const [defaultTaskText, setDefaultTaskText] = useState('');
@@ -224,14 +143,6 @@ function ManageTasksDialog({ visible, onDismiss }: ManageTasksDialogProps) {
                   </View>
                 ))}
               </View>
-
-              <Divider style={{ marginVertical: 12 }} />
-
-              <ReorderableList title="Reorder Defaults" items={defaults} onCommit={(ids) => store.reorderDefaults(ids)} />
-
-              {dayOnly.length > 0 && (
-                <ReorderableList title="Reorder Today-only" items={dayOnly} onCommit={(ids) => store.reorderDay(ids, ymd)} />
-              )}
 
               <Divider style={{ marginVertical: 12 }} />
 
